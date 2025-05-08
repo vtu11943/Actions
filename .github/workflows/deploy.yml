@@ -1,0 +1,38 @@
+name: Deploy to Ubuntu VM
+
+on:
+  push:
+    branches: [ main ]   # Or your chosen branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Clone source code
+      uses: actions/checkout@v3
+
+    - name: Set up SSH Key
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.VM_SSH_KEY }}
+
+    - name: Add VM to known_hosts
+      run: |
+        ssh-keyscan 74.50.65.75 >> ~/.ssh/known_hosts
+
+    - name: Rsync project files to VM
+      run: |
+        rsync -avz --delete \
+          -e "ssh -o StrictHostKeyChecking=yes" \
+          ./ root@74.50.65.75:/root/myapp/
+    
+    - name: Pull and restart with Docker Compose
+      run: |
+        ssh root@74.50.65.75 <<'ENDSSH'
+          cd /root/myapp
+          docker compose down || true
+          docker compose pull || true
+          docker compose build --no-cache
+          docker compose up -d --remove-orphans
+        ENDSSH
